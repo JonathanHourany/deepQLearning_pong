@@ -135,7 +135,7 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
                 state_t1 = np.append(observation_t1, 
                                         state_t[:,:,0:3], axis=2)
 
-                game_env.render()
+#                game_env.render()
                 replay_memory.append((state_t,
                                       action_t,
                                       reward,
@@ -191,7 +191,7 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
 learning_rate = 1e-2
 MEMORY_LENGTH = 1000000
 NUM_EPISODES = 5000000
-INIT_EPSILON = .1
+INIT_EPSILON = 1
 BATCH_SIZE = 32
 NUM_FRAMES_SKIP = 4
 decay_rate = 0.99  # decay factor for RMSProp leaky sum of grad^2
