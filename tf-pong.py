@@ -15,6 +15,8 @@ def preprop(image):
 def anneal_epsilon(current_e, init_e=1, end_e=.1, decay_factor=50000):
     if current_e > end_e:
         current_e -= (init_e - end_e) / decay_factor
+    else:
+        current_e = end_e
     return current_e
 
 def discount_reward(reward, Q):
@@ -37,6 +39,12 @@ def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 def createNetwork(actions):
+
+    # NOTE: About max_pooling -- There are 8 directions in which one can translate 
+    #   the input image by a single pixel. If max-pooling is done over a 2x2 region,
+    #   3 out of these 8 possible configurations will produce exactly the same output at
+    #   the convolutional layer. For max-pooling over a 3x3 window, this jumps to 5/8.
+
     # Input Layer
     state = tf.placeholder(tf.float32, [None, 80, 80, 4], name="state_pl")
 
@@ -50,19 +58,19 @@ def createNetwork(actions):
     b_conv2 = init_bias_matrix([64])
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2, 2) + b_conv2)
 
-    W_conv3 = init_weight_matrix([3, 3, 64, 64])
-    b_conv3 = init_bias_matrix([64])
-    h_conv3 = tf.nn.relu(conv2d(h_conv2, W_conv3, 1) + b_conv3)
+    #W_conv3 = init_weight_matrix([3, 3, 64, 64])
+    #b_conv3 = init_bias_matrix([64])
+    #h_conv3 = tf.nn.relu(conv2d(h_conv2, W_conv3, 1) + b_conv3)
 
-    h_conv3_flat = tf.reshape(h_conv3, [-1, 1600])
+    #h_conv3_flat = tf.reshape(h_conv3, [-1, 1600])
+    h_conv2_flat = tf.reshape(h_conv2, [-1, 1600])
 
-    W_fc1 = init_weight_matrix([1600, 512])
-    b_fc1 = init_bias_matrix([512])
-    #out_flatten = tf.reshape(h_conv3_flat, [-1, 1600])
-    h_fc1 = tf.nn.relu(tf.matmul(h_conv3_flat, W_fc1) + b_fc1)
+    W_fc1 = init_weight_matrix([1600, 400])
+    b_fc1 = init_bias_matrix([400])
+    h_fc1 = tf.nn.relu(tf.matmul(h_conv2_flat, W_fc1) + b_fc1)
 
     # Output Layer
-    W_fc2 = init_weight_matrix([512, actions])
+    W_fc2 = init_weight_matrix([400, actions])
     b_fc2 = init_bias_matrix([actions])
     output = tf.matmul(h_fc1, W_fc2) + b_fc2
     
@@ -107,27 +115,33 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
                                observation,
                                observation), axis=2)
 
-
         action_t = np.zeros(num_actions)
+
         while not done:
             if random.random() <= epsilon or t < 1000:
                 chosen_action = game_env.action_space.sample()
             else:
                 chosen_action = np.argmax(neural_network.eval(feed_dict={state: [state_t]})[0])
-                #print "Chosen Action: ", chosen_action
-            action_t[chosen_action] = 1 # One-hot encoding for actions
-            observation_t1, reward, done, info = game_env.step(chosen_action)
-            observation_t1 = preprop(observation_t1).reshape((80,80,1))
-            state_t1 = np.append(observation_t1, 
-                                    state_t[:,:,0:3], axis=2)
+                #print "Chosen Action: ", chosen_actin
 
-            game_env.render()
-            replay_memory.append((state_t,
-                                  action_t,
-                                  reward,
-                                  state_t1,
-                                  done))
-            
+            # Running the network forward is computationally expensive and we don't have to make
+            #  a deep, calculated response to every state. Instead we can saftely skip a few frames
+            #  by repeating the last move N number of times rather than ask the network what we
+            #  should do constantly. This drops training time significantly.
+            for _ in range(NUM_FRAMES_SKIP):
+                action_t[chosen_action] = 1 # One-hot encoding for actions
+                observation_t1, reward, done, info = game_env.step(chosen_action)
+                observation_t1 = preprop(observation_t1).reshape((80,80,1))
+                state_t1 = np.append(observation_t1, 
+                                        state_t[:,:,0:3], axis=2)
+
+                game_env.render()
+                replay_memory.append((state_t,
+                                      action_t,
+                                      reward,
+                                      state_t1,
+                                      done))
+                
             if len(replay_memory) > MEMORY_LENGTH:
                 replay_memory.popleft()
 
@@ -136,10 +150,6 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
                 mini_batch = random.sample(replay_memory, BATCH_SIZE)
 
                 # Grab the batch variables
-                #state_batch = [memory[0] for memory in mini_batch]
-                #action_batch = [memory[1] for memory in mini_batch]
-                #reward_batch = [memory[2] for memory in mini_batch]
-                #state_t1_batch = [memory[3] for memory in mini_batch]
                 state_batch, action_batch, reward_batch, state_t1_batch, _ = zip(*mini_batch)
                 y_batch = []
 
@@ -153,7 +163,6 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
                         y_batch.append(discount_reward(reward_batch[i], readout_batch))
 
                 # Take what we've gathered from our memory of past plays, and train on it
-                
                 train_step.run(feed_dict={y: y_batch,
                                           actions: action_batch,
                                           state: state_batch})
@@ -176,23 +185,24 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
 
         print "Total Number of Rewards: ", total_num_rewards
         print "Average Number of Rewards: ", avg_num_rewards
+        print "Epsilon: ", epsilon
 
 ## Hyperparameters
-learning_rate = 1e-1
+learning_rate = 1e-2
 MEMORY_LENGTH = 1000000
 NUM_EPISODES = 5000000
-INIT_EPSILON = 1
+INIT_EPSILON = .1
 BATCH_SIZE = 32
+NUM_FRAMES_SKIP = 4
 decay_rate = 0.99  # decay factor for RMSProp leaky sum of grad^2
 resume = False  # resume from previous checkpoint?
-render = False
 
 def lets_play():
     # Initialize Enviroment
     sess = tf.InteractiveSession()
     env = gym.make('Pong-v0')
     s, nn_readout, h_fc1 = createNetwork(env.action_space.n)
-    trainNetwork(sess, env, nn_readout, s)
+    trainNetwork(sess, env, nn_readout, s, learning_rate=learning_rate)
 
 def main():
     lets_play()
