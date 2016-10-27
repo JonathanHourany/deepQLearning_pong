@@ -6,10 +6,39 @@ import sys
 import cv2
 
 class DeepQLearner(object):
-    """An instance of a DQN"""
+    """Impliments a variant ofthe Q-learning algrothim as described by DeepMind Technologies
+    (see: https://arxiv.org/abs/1312.5602).
+
+    Parameters
+    -----------
+    game_env : object
+            An OpenAI Gym game enviroment
+    neural_network : object
+            A Tensorflow neural network 
+    learning_rate : float
+            Learning rate to be used with Tensorflow's AdamOptimizer
+    gamma : float
+            Discount factor per unit time step
+    replay_len : int
+            Number of game states to be remembered
+    min_replay_len : int
+            Number of sequence that must be observed before training
+    epsilon : float
+            Starting probability of taking a random action
+    min_epsilon : float
+            Minimum probability of taking a random action
+    anneal_espsilon : boolean
+            Controls whether epsilon should be annealed after every sequence
+    anneal_rate : int
+            Rate of annealing. Larger number results in slower annealing
+    skip_n_frames : int
+            Repeates actions k number of times before agent must select new action. 
+            Larger number increases number of games played, but could increase training time if 
+            k is so large as to prevent the network from exploring state space
+    """
 
     def __init__(self, game_env=None, neural_network=None, learning_rate=1e-4, gamma=.99, replay_len=1000000, min_replay_len=1000,
-                 epsilon=1, min_epsilon=0.1, anneal_epsilon=True, anneal_rate=500, skip_n_frames=4):
+                 epsilon=1, min_epsilon=0.1, anneal_epsilon=True, anneal_rate=1000, skip_n_frames=4):
 
         self._game_env = game_env
         self._lr = learning_rate
@@ -59,7 +88,8 @@ class DeepQLearner(object):
         else:
             self._epsilon = self._min_epsilon
 
-    def train_network(self, sess, state, batch_size=32, save=True, resume_from_checkpoint=True, max_to_keep=6):
+    def train_network(self, sess, state, process_obs, batch_size=32, save=True, resume_from_checkpoint=True,
+                      render_game=False, max_to_keep=6):
         # Set the number of legal actions available in game
         try:
             self.action_space_num = self._game_env.action_space.n
@@ -118,7 +148,9 @@ class DeepQLearner(object):
                     state_t1 = np.append(observation_t1,
                                          state_t[:, :, 0:3], axis=2)
 
-                    self._game_env.render()
+                    if render_game:
+                        self._game_env.render()
+
                     self._replay_memory.append((state_t,
                                                action_t,
                                                reward,

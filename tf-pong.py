@@ -23,6 +23,7 @@ def preprop(image):
     ret, image = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY)
     return image
 
+
 def anneal_epsilon(current_e, init_e=1, end_e=.1, decay_factor=50000):
     if current_e > end_e:
         current_e -= (init_e - end_e) / decay_factor
@@ -30,24 +31,19 @@ def anneal_epsilon(current_e, init_e=1, end_e=.1, decay_factor=50000):
         current_e = end_e
     return current_e
 
-def discount_reward(reward, Q):
-    """Returns the discounted reward for a given reward"""
-    GAMMA = 0.99  # discount factor for reward
-    return reward + GAMMA * np.max(Q)
-
-def init_weight_matrix(shape):
-    initial_values = tf.truncated_normal(shape, stddev=0.01)
-    return tf.Variable(initial_values)
 
 def init_bias_matrix(shape):
     initial_values = tf.constant(0.01, shape=shape)
     return tf.Variable(initial_values)
 
+
 def conv2d(x, W, stride):
     return tf.nn.conv2d(x, W, strides=[1, stride, stride, 1], padding='SAME')
 
+
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+
 
 def createNetwork(actions):
 
@@ -90,7 +86,7 @@ def createNetwork(actions):
 
 def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
     """Trains a neural network to play a game"""
-   
+
     # Set of legal game actions
     num_actions = game_env.action_space.n
 
@@ -100,7 +96,7 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
 
     # Get an action from the NN
     get_action = tf.reduce_sum(tf.mul(neural_network, actions), reduction_indices=1)
-    
+
     # Default cost function is a simple root-mean squared
     cost = tf.reduce_mean(tf.square(y - get_action))
     train_step = tf.train.AdamOptimizer(learning_rate).minimize(cost)
@@ -129,9 +125,9 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
         observation, reward, done, info = game_env.step(0)
         observation = preprop(observation)
         state_t = np.stack((observation,
-                               observation,
-                               observation,
-                               observation), axis=2)
+                            observation,
+                            observation,
+                            observation), axis=2)
 
         action_t = np.zeros(num_actions)
 
@@ -149,9 +145,9 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
                 action_t[chosen_action] = 1 # One-hot encoding for actions
                 observation_t1, reward, done, info = game_env.step(chosen_action)
                 #plt.imsave("../images/pong_play/{}".format(t), observation_t1)
-                observation_t1 = preprop(observation_t1).reshape((80,80,1))
-                state_t1 = np.append(observation_t1, 
-                                        state_t[:,:,0:3], axis=2)
+                observation_t1 = preprop(observation_t1).reshape((80, 80, 1))
+                state_t1 = np.append(observation_t1,
+                                     state_t[:, :, 0:3], axis=2)
 
                 game_env.render()
                 replay_memory.append((state_t,
@@ -159,7 +155,7 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
                                       reward,
                                       state_t1,
                                       done))
-                
+
                 t += 1
             if len(replay_memory) > MEMORY_LENGTH:
                 replay_memory.popleft()
@@ -198,7 +194,7 @@ def trainNetwork(sess, game_env, neural_network, state, learning_rate=1e-4):
                 checkpoint_global_step += 1
 
         with open('saved_networks/reward_tracker.csv', 'a') as reward_tracker:
-            total_num_rewards = sum([memory[2] for memory in replay_memory]) 
+            total_num_rewards = sum([memory[2] for memory in replay_memory])
             avg_num_rewards = sum([memory[2] for memory in replay_memory]) / float(episode + 1)
             reward_tracker.write("{}, {}, {}, {}\n".format(episode, avg_num_rewards, total_num_rewards, epsilon))
 
@@ -214,8 +210,10 @@ def lets_play():
     s, nn_readout, h_fc1 = createNetwork(env.action_space.n)
     trainNetwork(sess, env, nn_readout, s, learning_rate=learning_rate)
 
+
 def main():
     lets_play()
+
 
 if __name__ == "__main__":
     main()
